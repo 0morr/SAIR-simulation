@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description"
+        content="Interactive SAIR epidemiological model simulator for computer virus propagation, based on Piqueira et al. (2005).">
+  <title>SAIR Model Simulator — Network Epidemiology</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+
+  <style>
+    :root {
+      --bg: #f4f7f6;
+      --surface: #ffffff;
+      --surface-alt: #eef2f3;
+      --border: #dde3e6;
+      --text: #22313a;
+      --text-muted: #5a6b76;
+      --accent: #2980b9;
+      --accent-soft: #d6eaf8;
+      --success-bg: #d4edda; --success-fg: #155724; --success-border: #c3e6cb;
+      --danger-bg:  #f8d7da; --danger-fg:  #721c24; --danger-border:  #f5c6cb;
+      --radius: 10px;
+      --shadow: 0 4px 14px rgba(15, 30, 45, .08);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body { margin: 0; }
+
+    body {
+      padding: 12px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--surface);
+      padding: 18px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    header h1 {
+      margin: 0 0 4px;
+      text-align: center;
+      font-size: 1.2rem;
+      color: #1f2d3a;
+    }
+
+    header p {
+      margin: 0 0 12px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: .78rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 720px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface-alt);
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    fieldset {
+      border: 0;
+      margin: 0;
+      padding: 0;
+      min-width: 0;
+    }
+
+    legend {
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #34495e;
+      margin-bottom: 10px;
+      padding: 0;
+    }
+
+    .control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        "label  output"
+        "slider slider";
+      column-gap: .5rem;
+      row-gap: 2px;
+      margin-bottom: 8px;
+    }
+
+    .control label {
+      grid-area: label;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #34495e;
+    }
+
+    .control output {
+      grid-area: output;
+      font-size: .78rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      background: var(--accent-soft);
+      border-radius: 999px;
+      padding: 0 8px;
+      line-height: 1.5;
+    }
+
+    .control input[type="range"] {
+      grid-area: slider;
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+      margin: 0;
+    }
+
+    .control input[type="range"]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    button {
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: background-color .15s, border-color .15s;
+    }
+
+    button:hover { background: #e4eaed; border-color: #c5cdd2; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .analysis {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .analysis h2 {
+      margin: 0 0 6px;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #34495e;
+    }
+
+    .metrics { display: grid; gap: 6px; }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: .82rem;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 4px;
+    }
+
+    .metric:last-child { border-bottom: 0; }
+
+    .metric strong { color: #34495e; }
+    .metric span {
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+    }
+
+    .status-box {
+      padding: 9px 10px;
+      border-radius: 5px;
+      text-align: center;
+      font-weight: 700;
+      font-size: .85rem;
+      border: 1px solid transparent;
+      transition: background-color .2s, color .2s, border-color .2s;
+    }
+
+    .status-box.safe   { background: var(--success-bg); color: var(--success-fg); border-color: var(--success-border); }
+    .status-box.danger { background: var(--danger-bg);  color: var(--danger-fg);  border-color: var(--danger-border); }
+
+    .note {
+      font-size: .72rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    footer {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: .72rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    footer em { font-style: normal; color: var(--text); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <header>
+      <h1>SAIR Model Simulator</h1>
+      <p>
+        Computer-network epidemiology · based on <em>Piqueira et al. (2005)</em>,
+        <em>Epidemiological models applied to viruses in computer networks</em>.
+      </p>
+    </header>
+
+    <div class="layout">
+      <!-- ─── Controls ─── -->
+      <section class="panel" aria-labelledby="controls-title">
+        <form id="controls-form">
+          <fieldset>
+            <legend id="controls-title">Network parameters</legend>
+
+            <div class="control">
+              <label for="T">Total population (T)</label>
+              <output for="T" id="val-T">50</output>
+              <input type="range" id="T" name="T" min="10" max="200" step="1" value="50">
+            </div>
+
+            <div class="control">
+              <label for="betaAI">Antidote infection rate (β<sub>AI</sub>)</label>
+              <output for="betaAI" id="val-betaAI">0.010</output>
+              <input type="range" id="betaAI" name="betaAI" min="0.001" max="0.100" step="0.001" value="0.010">
+            </div>
+
+            <div class="control">
+              <label for="sigmaIS">Recovery rate (σ<sub>IS</sub>)</label>
+              <output for="sigmaIS" id="val-sigmaIS">0.5</output>
+              <input type="range" id="sigmaIS" name="sigmaIS" min="0.1" max="2.0" step="0.1" value="0.5">
+            </div>
+
+            <div class="control">
+              <label for="delta">Removal / isolation rate (δ)</label>
+              <output for="delta" id="val-delta">0.5</output>
+              <input type="range" id="delta" name="delta" min="0.1" max="2.0" step="0.1" value="0.5">
+            </div>
+
+            <div class="control">
+              <label for="alpha">Antivirus conversion rate (α)</label>
+              <output for="alpha" id="val-alpha">0.10</output>
+              <input type="range" id="alpha" name="alpha" min="0.01" max="0.50" step="0.01" value="0.10">
+            </div>
+
+            <div class="control">
+              <label for="I0">Initial infected (I<sub>0</sub>)</label>
+              <output for="I0" id="val-I0">2</output>
+              <input type="range" id="I0" name="I0" min="1" max="10" step="1" value="2">
+            </div>
+
+            <div class="actions">
+              <button type="button" id="resetBtn">Reset to defaults</button>
+            </div>
+          </fieldset>
+        </form>
+      </section>
+
+      <!-- ─── Threshold analysis ─── -->
+      <section class="panel analysis" aria-labelledby="analysis-title">
+        <div>
+          <h2 id="analysis-title">Threshold analysis (Eq. 18)</h2>
+          <div class="metrics">
+            <div class="metric">
+              <strong>Critical limit (β<sub>limit</sub>)</strong>
+              <span id="calc-limit">—</span>
+            </div>
+            <div class="metric">
+              <strong>Reproduction number (R<sub>01</sub>)</strong>
+              <span id="calc-R0">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="status-alert" class="status-box safe" role="status" aria-live="polite">
+          STATUS: Safe network (virus dies out)
+        </div>
+
+        <p class="note">
+          If R<sub>01</sub> &lt; 1 the disease-free equilibrium is stable;
+          if R<sub>01</sub> &gt; 1 the epidemic persists. Fixed:
+          β<sub>SI</sub> = 0.5, σ<sub>RS</sub> = 0.5.
+        </p>
+      </section>
+    </div>
+
+    <!-- ─── Simulation chart ─── -->
+    <section class="chart-container" aria-label="SAIR population dynamics over time">
+      <canvas id="sairChart">Your browser does not support the canvas element.</canvas>
+    </section>
+
+    <footer>
+      <em>Reference:</em> Piqueira, J. R. C., Navarro, B. F., &amp; Monteiro, L. H. A. (2005).
+      Epidemiological models applied to viruses in computer networks.
+      <em>Journal of Computer Science</em>, 1(1), 31–34.
+    </footer>
+  </main>
+
+  <script type="module">
+    "use strict";
+
+    /* ─── Constants ───────────────────────────────────────────── */
+    const FIXED = Object.freeze({ betaSI: 0.5, sigmaRS: 0.5 });
+    const SIM   = Object.freeze({ tMax: 20, dt: 0.05 });
+    const DEFAULTS = Object.freeze({
+      T: 50, betaAI: 0.01, sigmaIS: 0.5, delta: 0.5, alpha: 0.1, I0: 2,
+    });
+
+    /* ─── DOM references ──────────────────────────────────────── */
+    const form = document.getElementById('controls-form');
+    const inputs = {
+      T:       document.getElementById('T'),
+      betaAI:  document.getElementById('betaAI'),
+      sigmaIS: document.getElementById('sigmaIS'),
+      delta:   document.getElementById('delta'),
+      alpha:   document.getElementById('alpha'),
+      I0:      document.getElementById('I0'),
+    };
+    const displays = {
+      T:       document.getElementById('val-T'),
+      betaAI:  document.getElementById('val-betaAI'),
+      sigmaIS: document.getElementById('val-sigmaIS'),
+      delta:   document.getElementById('val-delta'),
+      alpha:   document.getElementById('val-alpha'),
+      I0:      document.getElementById('val-I0'),
+      limit:   document.getElementById('calc-limit'),
+      R0:      document.getElementById('calc-R0'),
+      alert:   document.getElementById('status-alert'),
+    };
+    const resetBtn = document.getElementById('resetBtn');
+    const canvas   = document.getElementById('sairChart');
+
+    /* ─── Helpers ─────────────────────────────────────────────── */
+    const clamp = (v, lo = 0) => (v < lo ? lo : v);
+
+    const readParams = () => ({
+      T:       Number(inputs.T.value),
+      betaAI:  Number(inputs.betaAI.value),
+      sigmaIS: Number(inputs.sigmaIS.value),
+      delta:   Number(inputs.delta.value),
+      alpha:   Number(inputs.alpha.value),
+      I0:      Number(inputs.I0.value),
+      ...FIXED,
+    });
+
+    const formatParams = (p) => ({
+      T:       String(p.T),
+      betaAI:  p.betaAI.toFixed(3),
+      sigmaIS: p.sigmaIS.toFixed(1),
+      delta:   p.delta.toFixed(1),
+      alpha:   p.alpha.toFixed(2),
+      I0:      String(p.I0),
+    });
+
+    /* ─── SAIR dynamics (Piqueira et al.) ─────────────────────── */
+    function derivative({ S, A, I, R }, p) {
+      const N = Math.max(p.T - 1, 1);
+      return {
+        dS: (-p.alpha * S * A - p.betaSI * S * I) / N + p.sigmaIS * I + p.sigmaRS * R,
+        dA: ( p.alpha * S * A - p.betaAI * A * I) / N,
+        dI: ( p.betaSI * S * I + p.betaAI * A * I) / N - p.sigmaIS * I - p.delta * I,
+        dR:   p.delta * I - p.sigmaRS * R,
+      };
+    }
+
+    function rk4Step(state, p, dt) {
+      const k1 = derivative(state, p);
+      const s2 = { S: state.S + dt/2 * k1.dS, A: state.A + dt/2 * k1.dA,
+                   I: state.I + dt/2 * k1.dI, R: state.R + dt/2 * k1.dR };
+      const k2 = derivative(s2, p);
+      const s3 = { S: state.S + dt/2 * k2.dS, A: state.A + dt/2 * k2.dA,
+                   I: state.I + dt/2 * k2.dI, R: state.R + dt/2 * k2.dR };
+      const k3 = derivative(s3, p);
+      const s4 = { S: state.S + dt * k3.dS, A: state.A + dt * k3.dA,
+                   I: state.I + dt * k3.dI, R: state.R + dt * k3.dR };
+      const k4 = derivative(s4, p);
+
+      return {
+        S: state.S + dt/6 * (k1.dS + 2*k2.dS + 2*k3.dS + k4.dS),
+        A: state.A + dt/6 * (k1.dA + 2*k2.dA + 2*k3.dA + k4.dA),
+        I: state.I + dt/6 * (k1.dI + 2*k2.dI + 2*k3.dI + k4.dI),
+        R: state.R + dt/6 * (k1.dR + 2*k2.dR + 2*k3.dR + k4.dR),
+      };
+    }
+
+    function simulate(p) {
+      const A0 = Math.floor((p.T - p.I0) / 2);
+      const S0 = Math.max(p.T - A0 - p.I0, 0);
+      let state = { S: S0, A: A0, I: p.I0, R: 0 };
+
+      const steps  = Math.round(SIM.tMax / SIM.dt);
+      const labels = new Array(steps + 1);
+      const series = { A: [], S: [], I: [], R: [] };
+
+      for (let i = 0; i <= steps; i++) {
+        labels[i] = (i * SIM.dt).toFixed(1);
+        series.A.push(state.A);
+        series.S.push(state.S);
+        series.I.push(state.I);
+        series.R.push(state.R);
+        state = rk4Step(state, p, SIM.dt);
+        state.S = clamp(state.S); state.A = clamp(state.A);
+        state.I = clamp(state.I); state.R = clamp(state.R);
+      }
+      return { labels, series };
+    }
+
+    /* ─── Chart.js setup ──────────────────────────────────────── */
+    if (typeof Chart === 'undefined') {
+      displays.alert.className = 'status-box danger';
+      displays.alert.textContent = 'Error: Chart.js failed to load.';
+      throw new Error('Chart.js not available');
+    }
+
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = '#22313a';
+
+    const sairChart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Antidote (A)',    data: [], borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,.15)',  tension: 0.25, pointRadius: 0, borderWidth: 2 },
+          { label: 'Susceptible (S)', data: [], borderColor: '#3498db', backgroundColor: 'rgba(52,152,219,.15)', tension: 0.25, pointRadius: 0, borderWidth: 2 },
+          { label: 'Infected (I)',    data: [], borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,.15)',  tension: 0.25, pointRadius: 0, borderWidth: 2 },
+          { label: 'Removed (R)',     data: [], borderColor: '#9b59b6', backgroundColor: 'rgba(155,89,182,.15)', tension: 0.25, pointRadius: 0, borderWidth: 2 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 180 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, padding: 10 } },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}` } },
+        },
+        scales: {
+          x: { title: { display: true, text: 'Time (steps)' }, grid: { color: 'rgba(0,0,0,.05)' } },
+          y: { beginAtZero: true, title: { display: true, text: 'Computers' }, grid: { color: 'rgba(0,0,0,.05)' } },
+        },
+      },
+    });
+
+    /* ─── Main update ─────────────────────────────────────────── */
+    function update() {
+      const p = readParams();
+
+      const display = formatParams(p);
+      for (const [k, v] of Object.entries(display)) {
+        if (displays[k]) displays[k].textContent = v;
+      }
+
+      const betaLimit = (p.sigmaIS + p.delta) / p.T;
+      const R01       = (p.betaAI * p.T) / (p.sigmaIS + p.delta);
+
+      displays.limit.textContent = betaLimit.toFixed(4);
+      displays.R0.textContent    = R01.toFixed(3);
+
+      const safe = R01 < 1;
+      displays.alert.className   = `status-box ${safe ? 'safe' : 'danger'}`;
+      displays.alert.textContent = safe
+        ? 'STATUS: Safe network (virus dies out)'
+        : 'STATUS: Epidemic alert (virus persists)';
+
+      const { labels, series } = simulate(p);
+      sairChart.data.labels            = labels;
+      sairChart.data.datasets[0].data  = series.A;
+      sairChart.data.datasets[1].data  = series.S;
+      sairChart.data.datasets[2].data  = series.I;
+      sairChart.data.datasets[3].data  = series.R;
+      sairChart.update();
+    }
+
+    /* ─── Events ──────────────────────────────────────────────── */
+    let frameScheduled = false;
+    form.addEventListener('input', () => {
+      if (frameScheduled) return;
+      frameScheduled = true;
+      requestAnimationFrame(() => { frameScheduled = false; update(); });
+    });
+
+    resetBtn.addEventListener('click', () => {
+      for (const [k, v] of Object.entries(DEFAULTS)) inputs[k].value = v;
+      update();
+    });
+
+    update();
+  </script>
+</body>
+</html>
